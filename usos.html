@@ -171,18 +171,22 @@ function render(){const o=CUR;if(!o)return;
 }
 let evoChart;
 function showEvo(u,ev){const o=CUR;if(!o)return;const r=o.usos[u];const ah=o.anios_hist||[];
- const labels=ah.concat([2030,2035]);
- const obs=(r.serie||[]).concat([null,null]);
- const proj=ah.map(()=>null);if(proj.length)proj[proj.length-1]=r["2024"];proj.push(r["2030"][scen],r["2035"][scen]);
+ // eje X LINEAL (año): la separación es proporcional al tiempo real, así 2024→2030 (6 años)
+ // ocupa más que un tramo anual y no se exagera la pendiente proyectada.
+ const obs=(r.serie||[]).map((v,i)=>({x:ah[i],y:v}));
+ const proj=[{x:2024,y:r["2024"]},{x:2030,y:r["2030"][scen]},{x:2035,y:r["2035"][scen]}];
  document.getElementById("evoTit").textContent=u+" — observado 2013–2024 y proyección a 2035 ("+scen+")";
  if(evoChart)evoChart.destroy();
  evoChart=new Chart(document.getElementById("evoCanvas"),{type:"line",
-  data:{labels:labels,datasets:[
-    {label:"Observado",data:obs,borderColor:UC[u],backgroundColor:UC[u],borderWidth:2.5,pointRadius:0,tension:.25},
-    {label:"Proyección",data:proj,borderColor:UC[u],borderDash:[5,4],borderWidth:2,pointRadius:3,tension:.25}]},
+  data:{datasets:[
+    {label:"Observado",data:obs,borderColor:UC[u],backgroundColor:UC[u],borderWidth:2.5,pointRadius:0,tension:0},
+    {label:"Proyección",data:proj,borderColor:UC[u],backgroundColor:UC[u],borderDash:[5,4],borderWidth:2,pointRadius:3,tension:0}]},
   options:{maintainAspectRatio:false,animation:false,plugins:{legend:{position:"bottom",labels:{boxWidth:10,font:{size:9}}},
-    tooltip:{callbacks:{label:c=>c.dataset.label+": "+fmt(c.parsed.y)+" m²"}}},
-    scales:{y:{title:{display:true,text:"m² construidos",font:{size:9}},ticks:{font:{size:9}}},x:{ticks:{font:{size:9},maxRotation:0,autoSkip:true,maxTicksLimit:8}}}}});
+    tooltip:{callbacks:{title:it=>String(it[0].parsed.x),label:c=>c.dataset.label+": "+fmt(c.parsed.y)+" m²"}}},
+    scales:{y:{title:{display:true,text:"m² construidos",font:{size:9}},ticks:{font:{size:9}}},
+      x:{type:"linear",min:ah[0]||2013,max:2035,offset:false,
+        afterBuildTicks:a=>{a.ticks=[2013,2016,2019,2022,2024,2030,2035].map(v=>({value:v}));},
+        ticks:{font:{size:9},maxRotation:0,autoSkip:false,callback:v=>String(v)}}}}});
  document.getElementById("evoPop").style.display="block";moveEvo(ev);
 }
 function moveEvo(ev){const pop=document.getElementById("evoPop");const w=pop.offsetWidth||360,hh=pop.offsetHeight||220;
