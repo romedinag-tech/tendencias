@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Tendencias por uso de suelo · 2030 / 2035 (Chile)</title>
+<style>
+:root{--navy:#1f4e79;--or:#c55a11;--bg:#f7f9fc;--ink:#1c2733;--mut:#5b6b7b;--line:#e6ebf1;}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5}
+.warn{background:#c55a11;color:#fff;padding:7px 16px;font-size:.85rem;text-align:center}.warn a{color:#fff}
+header{background:linear-gradient(135deg,#1f4e79,#2e5e8c);color:#fff;padding:22px}
+.wrap{max-width:1200px;margin:0 auto;padding:0 18px}
+h1{margin:0 0 4px;font-size:1.45rem}.lead{opacity:.92;font-size:.92rem;max-width:920px}
+.panel{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:16px}
+label{display:block;font-size:.74rem;color:var(--mut);font-weight:600;margin-bottom:4px}
+select{font-size:.95rem;padding:8px 10px;border:1px solid #c7d2de;border-radius:8px;min-width:230px}
+.seg{display:inline-flex;border:1px solid #c7d2de;border-radius:8px;overflow:hidden}
+.seg button{border:none;background:#fff;color:var(--navy);padding:8px 14px;cursor:pointer;font-weight:600;font-size:.88rem}
+.seg button.on{background:var(--navy);color:#fff}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:14px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:13px}
+.kpi .v{font-size:1.35rem;font-weight:800;color:var(--navy)}.kpi .l{color:var(--mut);font-size:.78rem;margin-top:3px}.kpi .s{font-weight:700;font-size:.82rem}
+.grid{display:grid;grid-template-columns:1.25fr 1fr;gap:16px;margin-top:16px}@media(max-width:880px){.grid{grid-template-columns:1fr}}
+.box{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px}.box h3{margin:0 0 2px;color:var(--navy);font-size:1.02rem}.box p{margin:0 0 8px;color:var(--mut);font-size:.84rem}
+.cwrap{position:relative;height:340px}
+table{border-collapse:collapse;width:100%;font-size:.84rem;margin-top:14px}td,th{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right}th:first-child,td:first-child{text-align:left}thead th{background:var(--navy);color:#fff}
+td.pos{color:#1a9850;font-weight:700}
+footer{padding:22px;color:var(--mut);font-size:.82rem;text-align:center}
+</style></head>
+<body>
+<div class="warn">⚠ Tendencias PROVISIONALES por uso de suelo · escenarios (no pronóstico oficial). · <a href="index.html">↩ Visor general</a></div>
+<header><div class="wrap">
+  <h1>Proyección por uso de suelo · 2030 / 2035</h1>
+  <p class="lead">Para cada ciudad/metrópolis se proyecta <b>cada uso por separado</b> (Habitacional, Comercio, Educación, Salud, Oficina, Industria) a nivel de <b>zona censal</b>, con escenarios. Mira las <b>cantidades</b> (m²) por horizonte y qué usos <b>crecen más o menos en %</b>.</p>
+</div></header>
+<div class="wrap">
+  <div class="panel">
+    <div><label>Ciudad / metrópolis</label><select id="city"></select></div>
+    <div><label>Escenario</label>
+      <span class="seg" id="scen"><button data-s="tend" class="on">Tendencial</button><button data-s="alto">Alto</button><button data-s="cons">Consolidación</button></span></div>
+  </div>
+  <div class="kpis" id="kpis"></div>
+  <div class="grid">
+    <div class="box"><h3 id="t1">Cantidades por uso (m²)</h3><p>m² construidos por uso en 2024, 2030 y 2035 (escenario elegido).</p><div class="cwrap"><canvas id="cQty"></canvas></div></div>
+    <div class="box"><h3 id="t2">Variación % por uso (2024→2035)</h3><p>Cuáles usos se incrementan más y cuáles menos.</p><div class="cwrap"><canvas id="cPct"></canvas></div></div>
+  </div>
+  <div class="box" style="margin-top:16px;overflow:auto"><h3>Detalle</h3><table id="tbl"></table></div>
+</div>
+<footer>Tendencias por uso (provisional) · flujo-medio rezago-corregido a nivel de zona urbana · Rodrigo Medina González, U. de Concepción. La residencial no se ata aquí a la demanda de viviendas (usa flujo-medio), por lo que puede crecer más rápido que la proyección comunal demográficamente acotada.</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const USOS=["Habitacional","Comercio","Educacion","Salud","Oficina","Industria"];
+const UC={Habitacional:"#1f4e79",Comercio:"#c55a11",Educacion:"#21918c",Salud:"#d73027",Oficina:"#8856a7",Industria:"#9aa7b4"};
+const fmt=x=>x==null?"s/d":Math.round(x).toLocaleString('es-CL');
+let IDX,CUR,scen="tend",cQty,cPct;
+fetch("data/proyecciones_uso_index.json").then(r=>r.text()).then(t=>{IDX=JSON.parse(t.replace(/\bNaN\b/g,"null"));
+ const sel=document.getElementById("city");
+ IDX.ciudades.forEach(c=>{const o=document.createElement("option");o.value=c.slug;o.textContent=c.nombre;sel.appendChild(o);});
+ sel.onchange=()=>load(sel.value);
+ document.querySelectorAll("#scen button").forEach(b=>b.onclick=()=>{scen=b.dataset.s;
+   document.querySelectorAll("#scen button").forEach(x=>x.classList.toggle("on",x===b));render();});
+ sel.value=IDX.ciudades.find(c=>c.slug==="gran_concepcion")?"gran_concepcion":IDX.ciudades[0].slug;
+ load(sel.value);
+});
+function load(slug){fetch("data/proyecciones_uso/"+slug+".json").then(r=>r.text()).then(t=>{CUR=JSON.parse(t.replace(/\bNaN\b/g,"null"));render();});}
+function render(){const o=CUR;if(!o)return;
+ // KPIs: total + top uso que más crece
+ const tot=o.total;const pctsorted=USOS.map(u=>[u,o.usos[u].pct_2035]).filter(x=>x[1]!=null).sort((a,b)=>b[1]-a[1]);
+ document.getElementById("kpis").innerHTML=[
+  ["m² totales 2035",fmt(tot["2035"][scen]),"+"+tot.pct_2035+"% vs 2024 (tend)"],
+  ["Uso que más crece",pctsorted[0][0],"+"+pctsorted[0][1]+"% a 2035"],
+  ["Uso que menos crece",pctsorted[pctsorted.length-1][0],(pctsorted[pctsorted.length-1][1]>=0?"+":"")+pctsorted[pctsorted.length-1][1]+"% a 2035"],
+  ["Comunas con catastro",o.comunas_con_catastro,"a nivel de zona"]
+ ].map(([l,v,s])=>'<div class="kpi"><div class="v">'+v+'</div><div class="l">'+l+'</div><div class="s" style="color:'+(String(s).includes("-")?"#d73027":"#1a9850")+'">'+s+'</div></div>').join("");
+ // Chart cantidades: barras agrupadas (x=uso, series=2024/2030/2035)
+ const yrs=["2024","2030","2035"];
+ if(cQty)cQty.destroy();
+ cQty=new Chart(document.getElementById("cQty"),{type:"bar",
+  data:{labels:USOS,datasets:yrs.map((y,i)=>({label:y,backgroundColor:["#cbd6e2","#5e84ad","#1f4e79"][i],
+    data:USOS.map(u=>y==="2024"?o.usos[u]["2024"]:o.usos[u][y][scen])}))},
+  options:{maintainAspectRatio:false,plugins:{legend:{position:"bottom"},
+    tooltip:{callbacks:{label:c=>c.dataset.label+": "+fmt(c.parsed.y)+" m²"}}},
+    scales:{y:{title:{display:true,text:"m² construidos"}}}}});
+ // Chart variación %: barras horizontales ordenadas
+ const pr=USOS.map(u=>({u,p:scen==="tend"?o.usos[u].pct_2035:Math.round((o.usos[u]["2035"][scen]/o.usos[u]["2024"]-1)*1000)/10}))
+   .filter(x=>x.p!=null).sort((a,b)=>b.p-a.p);
+ if(cPct)cPct.destroy();
+ cPct=new Chart(document.getElementById("cPct"),{type:"bar",
+  data:{labels:pr.map(x=>x.u),datasets:[{data:pr.map(x=>x.p),backgroundColor:pr.map(x=>UC[x.u])}]},
+  options:{indexAxis:"y",maintainAspectRatio:false,plugins:{legend:{display:false},
+    tooltip:{callbacks:{label:c=>(c.parsed.x>=0?"+":"")+c.parsed.x+"% (2024→2035)"}}},
+    scales:{x:{title:{display:true,text:"% variación 2024→2035 ("+scen+")"}}}}});
+ document.getElementById("t1").textContent="Cantidades por uso (m²) — "+o.nombre;
+ document.getElementById("t2").textContent="Variación % por uso — "+o.nombre;
+ // tabla
+ let h="<thead><tr><th>Uso</th><th>2024</th><th>2030</th><th>2035</th><th>% 2024→35</th></tr></thead><tbody>";
+ USOS.forEach(u=>{const r=o.usos[u];const p=scen==="tend"?r.pct_2035:Math.round((r["2035"][scen]/r["2024"]-1)*1000)/10;
+   h+="<tr><td>"+u+"</td><td>"+fmt(r["2024"])+"</td><td>"+fmt(r["2030"][scen])+"</td><td>"+fmt(r["2035"][scen])+"</td><td class='pos'>"+(p>=0?"+":"")+p+"%</td></tr>";});
+ const t=o.total;h+="<tr style='font-weight:700'><td>TOTAL</td><td>"+fmt(t["2024"])+"</td><td>"+fmt(t["2030"][scen])+"</td><td>"+fmt(t["2035"][scen])+"</td><td class='pos'>+"+t.pct_2035+"%</td></tr>";
+ document.getElementById("tbl").innerHTML=h+"</tbody>";
+}
+</script>
+</body></html>
