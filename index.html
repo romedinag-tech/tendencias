@@ -78,7 +78,7 @@ footer{padding:24px;color:var(--mut);font-size:.82rem;text-align:center}
 const NAVY="#1f4e79",OR="#c55a11",USOS=["Habitacional","Comercio","Educacion","Salud","Oficina","Industria"];
 const fmt=x=>x==null?"s/d":Math.round(x).toLocaleString('es-CL');
 const AGERAMP=["#2c7bb6","#abd9e9","#ffffbf","#fdae61","#d7191c"];   // joven -> envejecido
-let SUM,GEO,EIDX,byCut={},envByCut={},cPob,cEnv,map,layer,legend,zmap,zlayer,zlegend,ZG,zYear="2024";
+let SUM,GEO,EIDX,byCut={},envByCut={},cPob,cEnv,map,layer,legend,zmap,zlayer,zlegend,ZG,ZBRK=null,zYear="2024";
 Promise.all([
  fetch("data/proyecciones_comunas.json").then(r=>r.text()).then(t=>JSON.parse(t.replace(/\bNaN\b/g,"null"))),
  fetch("data/comunas.geojson").then(r=>r.json()),
@@ -136,7 +136,11 @@ function renderEnv(o){CURENV=o;refreshKpis();
  document.getElementById("agenote").innerHTML="<b>Envejecimiento e hito poblacional ("+o.nombre+"):</b> el índice pasa de "+i24+" (2024) a <b>"+i35+"</b> en 2035 — de "+(i24<100?"más niños que adultos mayores":"más adultos mayores que niños")+" a "+(i35>=100?"<b>más adultos mayores que niños</b>":"aún más niños")+". <b>Peak poblacional:</b> "+pkTxt+". <span style='color:#7a4a17'>Índice = personas de 65+ por cada 100 menores de 15 (INE).</span>";
  // mapa zonal
  if(o.mapa_zonal){document.getElementById("zctrls").style.display="flex";
-   fetch("data/envejecimiento/zonas_"+o.slug+".geojson").then(r=>r.text()).then(t=>{ZG=JSON.parse(t.replace(/\bNaN\b/g,"null"));ensureZMap();recolorZ(true);});
+   fetch("data/envejecimiento/zonas_"+o.slug+".geojson").then(r=>r.text()).then(t=>{ZG=JSON.parse(t.replace(/\bNaN\b/g,"null"));
+     // cortes FIJOS por ciudad (mismos intervalos los 3 años) => al envejecer, las zonas se ven más rojas
+     const pool=[];ZG.features.forEach(f=>["idx2024","idx2030","idx2035"].forEach(k=>{if(f.properties[k]!=null)pool.push(f.properties[k]);}));
+     ZBRK=zbreaks(pool);
+     ensureZMap();recolorZ(true);});
    document.getElementById("zmap").style.display="";}
  else{document.getElementById("zctrls").style.display="none";document.getElementById("zmap").style.display="none";
    document.getElementById("zmapnote").textContent="Mapa por zona disponible en áreas metropolitanas y comunas grandes. Para esta unidad, usa el índice de arriba.";ZG=null;}
@@ -161,14 +165,14 @@ function zbreaks(vals){const v=vals.filter(x=>x!=null).sort((a,b)=>a-b);if(!v.le
 function zcolor(x,brk){if(x==null)return "#d8dde3";if(!brk)return AGERAMP[2];for(let i=0;i<4;i++)if(x<=brk[i])return AGERAMP[i];return AGERAMP[4];}
 function zfield(){return zYear==="2024"?"idx2024":zYear==="2030"?"idx2030":"idx2035";}
 function recolorZ(fit){if(!ZG||!zmap)return;const fld=zfield();
- const vals=ZG.features.map(f=>f.properties[fld]);const brk=zbreaks(vals);
+ const brk=ZBRK;   // intervalos fijos (idénticos para 2024/2030/2035) para comparar años
  if(zlayer)zmap.removeLayer(zlayer);
  zlayer=L.geoJSON(ZG,{style:f=>{const v=f.properties[fld];return {weight:.4,color:"#888",fillOpacity:.82,fillColor:zcolor(v,brk)};},
    onEachFeature:(f,l)=>{const p=f.properties;
      l.bindPopup("<b>Zona "+p.zona+"</b> · "+(p.comuna||"")+"<br>Índice de envejecimiento (60+/<14):<br>2024: <b>"+(p.idx2024==null?"s/d":p.idx2024)+"</b><br>2030: "+(p.idx2030==null?"s/d":p.idx2030)+"<br>2035: "+(p.idx2035==null?"s/d":p.idx2035)+(p.pob!=null?"<br>Población: "+fmt(p.pob):""));}}).addTo(zmap);
  if(zlegend)zmap.removeControl(zlegend);zlegend=L.control({position:"bottomright"});
  zlegend.onAdd=()=>{const d=L.DomUtil.create("div","legend");
-   d.innerHTML="<b>Índice envejec. "+zYear+"</b><br>"+(brk?("<i style='background:"+AGERAMP[0]+"'></i>≤ "+Math.round(brk[0])+"<br>"+[1,2,3].map(i=>"<i style='background:"+AGERAMP[i]+"'></i>"+Math.round(brk[i-1])+"–"+Math.round(brk[i])).join("<br>")+"<br><i style='background:"+AGERAMP[4]+"'></i>> "+Math.round(brk[3])):"sin datos")+"<br><i style='background:#d8dde3'></i>s/d";return d;};
+   d.innerHTML="<b>Índice de envejecimiento</b><br><span style='color:#5b6b7b;font-size:.72rem'>escala fija (compara años)</span><br>"+(brk?("<i style='background:"+AGERAMP[0]+"'></i>≤ "+Math.round(brk[0])+"<br>"+[1,2,3].map(i=>"<i style='background:"+AGERAMP[i]+"'></i>"+Math.round(brk[i-1])+"–"+Math.round(brk[i])).join("<br>")+"<br><i style='background:"+AGERAMP[4]+"'></i>> "+Math.round(brk[3])):"sin datos")+"<br><i style='background:#d8dde3'></i>s/d";return d;};
  zlegend.addTo(zmap);
  document.getElementById("zmapnote").innerHTML="<b>"+(CURENV?CURENV.nombre:"")+"</b> — índice por zona en "+zYear+(zYear!=="2024"?" (proyectado)":" (observado, Censo 2024)")+". Más rojo = más envejecido (más adultos mayores por niño).";
  if(fit){try{zmap.fitBounds(zlayer.getBounds(),{padding:[8,8]});}catch(e){}}
