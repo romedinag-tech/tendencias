@@ -34,11 +34,11 @@ footer{padding:24px;color:var(--mut);font-size:.82rem;text-align:center}
 <div class="warn">⚠ Escenarios PROVISIONALES en revisión · Demografía: proyección comunal <b>INE base 2017</b> corregida al techo nacional <b>INE base 2024</b> (anclada al Censo 2024). No usar como pronóstico oficial. · <a href="usos.html">📊 Proyección por uso de suelo</a> · <a href="INFORME_PROYECCIONES_GC.docx">📄 Informe (Word)</a></div>
 <header><div class="wrap">
   <h1>Tendencias de demografía y uso de suelo · 2030 / 2035</h1>
-  <p class="lead w">Proyección por comuna (flujo-medio del stock por uso, rezago-corregido + coherencia residencial). Escenarios Tendencial · Alto · Consolidación. Calibrado por backtesting. Estimaciones en revisión.</p>
+  <p class="lead w">Proyección por comuna y área metropolitana (flujo-medio del stock por uso + coherencia residencial). Demografía anclada a las tendencias del INE. Escenarios Tendencial · Alto · Consolidación. Estimaciones en revisión.</p>
 </div></header>
 <div class="wrap">
   <div class="panel">
-    <div><label>Comuna</label><select id="sel"></select></div>
+    <div><label>Comuna o área metropolitana</label><select id="sel"></select></div>
     <div><label>Indicador del mapa nacional</label><select id="mapsel">
       <option value="m2pct">Crecimiento de m² 2024→2035 (%)</option>
       <option value="pobpct">Crecimiento de población 2024→2035 (%)</option></select></div>
@@ -53,10 +53,6 @@ footer{padding:24px;color:var(--mut);font-size:.82rem;text-align:center}
   <h2>Mapa nacional del cambio proyectado<span></span></h2>
   <p class="lead">Coroplético del crecimiento proyectado 2024→2035 (escenario tendencial). Provisional.</p>
   <div id="map"></div>
-
-  <h2>Backtesting — calibración del modelo</h2>
-  <p class="lead">Entrenar ≤T0, predecir T0+7 años, comparar con el stock observado. MAPE (%) promedio por ciudad. <b>Flujo-medio</b> es el método elegido (más robusto que CAGR).</p>
-  <div class="box" style="overflow:auto"><table id="bt"></table></div>
 </div>
 <footer>Tendencias 2030/2035 (provisionales) · Rodrigo Medina González, Universidad de Concepción · Demografía: INE comunal base 2017 corregida al techo nacional INE base 2024 (Censo 2024) · Suelo: Catastro SII reconstruido desde año de construcción.</footer>
 
@@ -66,16 +62,19 @@ footer{padding:24px;color:var(--mut);font-size:.82rem;text-align:center}
 const NAVY="#1f4e79",OR="#c55a11",USOS=["Habitacional","Comercio","Educacion","Salud","Oficina","Industria"];
 const UC={Habitacional:"#1f4e79",Comercio:"#c55a11",Educacion:"#21918c",Salud:"#d73027",Oficina:"#8856a7",Industria:"#9aa7b4"};
 const fmt=x=>x==null?"s/d":Math.round(x).toLocaleString('es-CL');
-let SUM,GEO,BT,byCut={},cPob,cM2,map,layer,legend;
+let SUM,GEO,byCut={},cPob,cM2,map,layer,legend;
 Promise.all([
  fetch("data/proyecciones_comunas.json").then(r=>r.text()).then(t=>JSON.parse(t.replace(/\bNaN\b/g,"null"))),
- fetch("data/comunas.geojson").then(r=>r.json()),
- fetch("data/proyecciones_backtest.json").then(r=>r.json())
-]).then(([s,g,bt])=>{SUM=s;GEO=g;BT=bt;s.comunas.forEach(c=>byCut[c.cut]=c);
+ fetch("data/comunas.geojson").then(r=>r.json())
+]).then(([s,g])=>{SUM=s;GEO=g;s.comunas.forEach(c=>byCut[c.cut]=c);
  const sel=document.getElementById("sel");
- s.comunas.slice().sort((a,b)=>(b.pob_2024||0)-(a.pob_2024||0)).forEach(c=>{const o=document.createElement("option");o.value=c.cut;o.textContent=c.comuna;sel.appendChild(o);});
+ const addGroup=(lbl,arr)=>{if(!arr.length)return;const grp=document.createElement("optgroup");grp.label=lbl;
+   arr.sort((a,b)=>(b.pob_2024||0)-(a.pob_2024||0)).forEach(c=>{const o=document.createElement("option");o.value=c.cut;o.textContent=c.comuna;grp.appendChild(o);});
+   sel.appendChild(grp);};
+ addGroup("Áreas metropolitanas",s.comunas.filter(c=>c.es_area));
+ addGroup("Comunas",s.comunas.filter(c=>!c.es_area));
  sel.onchange=()=>loadComuna(sel.value); document.getElementById("mapsel").onchange=drawMap;
- buildBT(); initMap(); drawMap();
+ initMap(); drawMap();
  sel.value="8101"; loadComuna("8101");
 });
 function loadComuna(cut){fetch("data/proyecciones/"+cut+".json").then(r=>r.text()).then(t=>render(JSON.parse(t.replace(/\bNaN\b/g,"null"))));}
@@ -111,11 +110,6 @@ function render(o){
  const dp=100*(p35/p24-1),dh=o.suelo&&o.suelo.Habitacional?100*(o.suelo.Habitacional["2035"].tend/o.suelo.Habitacional["2024"]-1):null;
  document.getElementById("cohnote").innerHTML="<b>Coherencia demografía–suelo (2024→2035):</b> población "+dp.toFixed(1)+"%"+(dh!=null?", suelo habitacional "+dh.toFixed(1)+"% (atado a Δviviendas)":"")+". El suelo no residencial usa flujo-medio reciente rezago-corregido. <b>Demografía: INE comunal base 2017 corregida al techo nacional INE base 2024.</b>";
 }
-function buildBT(){let h="<thead><tr><th>Ciudad</th><th>CAGR (T0=2016→2023)</th><th>Flujo-medio</th></tr></thead><tbody>";
- for(const nm in BT){const r=BT[nm]["2016"];const mc=avg(USOS.map(u=>r[u].cagr)),mf=avg(USOS.map(u=>r[u].flujo));
-  h+="<tr><td>"+nm+"</td><td>"+(mc!=null?mc.toFixed(1)+"%":"—")+"</td><td><b>"+(mf!=null?mf.toFixed(1)+"%":"—")+"</b></td></tr>";}
- document.getElementById("bt").innerHTML=h+"</tbody>";}
-function avg(a){a=a.filter(x=>x!=null);return a.length?a.reduce((x,y)=>x+y,0)/a.length:null;}
 function initMap(){map=L.map("map",{preferCanvas:true}).setView([-38,-72],5);
  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{attribution:'&copy; CARTO',maxZoom:19}).addTo(map);}
 function valFor(c,mode){if(!c)return null;

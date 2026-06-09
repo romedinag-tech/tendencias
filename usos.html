@@ -26,6 +26,10 @@ select{font-size:.95rem;padding:8px 10px;border:1px solid #c7d2de;border-radius:
 .cwrap{position:relative;height:340px}
 table{border-collapse:collapse;width:100%;font-size:.84rem;margin-top:14px}td,th{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right}th:first-child,td:first-child{text-align:left}thead th{background:var(--navy);color:#fff}
 td.pos{color:#1a9850;font-weight:700}
+.uname{cursor:help;border-bottom:1px dotted #7d909f;font-weight:600}
+#evoPop{position:fixed;z-index:9999;display:none;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.2);padding:10px 12px;width:360px;pointer-events:none}
+#evoPop h4{margin:0 0 4px;font-size:.84rem;color:var(--navy)}
+#evoPop .ec{position:relative;height:180px}
 footer{padding:22px;color:var(--mut);font-size:.82rem;text-align:center}
 </style></head>
 <body>
@@ -45,7 +49,9 @@ footer{padding:22px;color:var(--mut);font-size:.82rem;text-align:center}
     <div class="box"><h3 id="t1">Cantidades por uso (m²)</h3><p>m² construidos por uso en 2024, 2030 y 2035 (escenario elegido).</p><div class="cwrap"><canvas id="cQty"></canvas></div></div>
     <div class="box"><h3 id="t2">Variación % por uso (2024→2035)</h3><p>Cuáles usos se incrementan más y cuáles menos.</p><div class="cwrap"><canvas id="cPct"></canvas></div></div>
   </div>
-  <div class="box" style="margin-top:16px;overflow:auto"><h3>Detalle</h3><table id="tbl"></table></div>
+  <div class="box" style="margin-top:16px;overflow:auto"><h3>Detalle</h3>
+    <p>Contraste entre el crecimiento <b>observado 2013→2024</b> (lo que efectivamente ocurrió) y el <b>proyectado 2024→2035</b>. Pasa el cursor sobre el <b>nombre de un uso</b> para ver su evolución y tendencia.</p>
+    <table id="tbl"></table></div>
   <div class="box" style="margin-top:16px"><h3 id="tmap">Mapa por zona</h3>
     <p id="mapnote">Para las áreas metropolitanas: cada zona censal según el uso y año elegidos.</p>
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:6px" id="zctrls">
@@ -57,6 +63,7 @@ footer{padding:22px;color:var(--mut);font-size:.82rem;text-align:center}
     <p id="zscendesc" style="color:var(--mut);font-size:.82rem;margin:0 0 8px"></p>
     <div id="map" style="height:520px;border-radius:12px;border:1px solid var(--line)"></div></div>
 </div>
+<div id="evoPop"><h4 id="evoTit"></h4><div class="ec"><canvas id="evoCanvas"></canvas></div></div>
 <footer>Tendencias por uso (provisional) · flujo-medio rezago-corregido a nivel de zona urbana · Rodrigo Medina González, U. de Concepción. La residencial no se ata aquí a la demanda de viviendas (usa flujo-medio), por lo que puede crecer más rápido que la proyección comunal demográficamente acotada.</footer>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -150,12 +157,39 @@ function render(){const o=CUR;if(!o)return;
     scales:{x:{title:{display:true,text:"% variación 2024→2035 ("+scen+")"}}}}});
  document.getElementById("t1").textContent="Cantidades por uso (m²) — "+o.nombre;
  document.getElementById("t2").textContent="Variación % por uso — "+o.nombre;
- // tabla
- let h="<thead><tr><th>Uso</th><th>2024</th><th>2030</th><th>2035</th><th>% 2024→35</th></tr></thead><tbody>";
+ // tabla — contraste observado 2013→24 vs proyectado 2024→35
+ const pcell=p=>"<td style='font-weight:700;color:"+(p==null?"#5b6b7b":(p>=0?"#1a9850":"#d73027"))+"'>"+(p==null?"s/d":(p>=0?"+":"")+p+"%")+"</td>";
+ let h="<thead><tr><th>Uso</th><th>2024</th><th>2030</th><th>2035</th>"
+   +"<th>% 2013→24<br><span style='font-weight:400;opacity:.85'>observado</span></th>"
+   +"<th>% 2024→35<br><span style='font-weight:400;opacity:.85'>proyectado</span></th></tr></thead><tbody>";
  USOS.forEach(u=>{const r=o.usos[u];const p=scen==="tend"?r.pct_2035:Math.round((r["2035"][scen]/r["2024"]-1)*1000)/10;
-   h+="<tr><td>"+u+"</td><td>"+fmt(r["2024"])+"</td><td>"+fmt(r["2030"][scen])+"</td><td>"+fmt(r["2035"][scen])+"</td><td class='pos'>"+(p>=0?"+":"")+p+"%</td></tr>";});
- const t=o.total;h+="<tr style='font-weight:700'><td>TOTAL</td><td>"+fmt(t["2024"])+"</td><td>"+fmt(t["2030"][scen])+"</td><td>"+fmt(t["2035"][scen])+"</td><td class='pos'>+"+t.pct_2035+"%</td></tr>";
+   h+="<tr><td><span class='uname' data-u='"+u+"'>"+u+"</span></td><td>"+fmt(r["2024"])+"</td><td>"+fmt(r["2030"][scen])+"</td><td>"+fmt(r["2035"][scen])+"</td>"+pcell(r.pct_1324)+pcell(p)+"</tr>";});
+ const t=o.total;const tp=scen==="tend"?t.pct_2035:Math.round((t["2035"][scen]/t["2024"]-1)*1000)/10;
+ h+="<tr style='font-weight:700'><td>TOTAL</td><td>"+fmt(t["2024"])+"</td><td>"+fmt(t["2030"][scen])+"</td><td>"+fmt(t["2035"][scen])+"</td>"+pcell(t.pct_1324)+pcell(tp)+"</tr>";
  document.getElementById("tbl").innerHTML=h+"</tbody>";
+ document.querySelectorAll("#tbl .uname").forEach(el=>{el.onmouseenter=ev=>showEvo(el.dataset.u,ev);el.onmousemove=moveEvo;el.onmouseleave=hideEvo;});
 }
+let evoChart;
+function showEvo(u,ev){const o=CUR;if(!o)return;const r=o.usos[u];const ah=o.anios_hist||[];
+ const labels=ah.concat([2030,2035]);
+ const obs=(r.serie||[]).concat([null,null]);
+ const proj=ah.map(()=>null);if(proj.length)proj[proj.length-1]=r["2024"];proj.push(r["2030"][scen],r["2035"][scen]);
+ document.getElementById("evoTit").textContent=u+" — observado 2013–2024 y proyección a 2035 ("+scen+")";
+ if(evoChart)evoChart.destroy();
+ evoChart=new Chart(document.getElementById("evoCanvas"),{type:"line",
+  data:{labels:labels,datasets:[
+    {label:"Observado",data:obs,borderColor:UC[u],backgroundColor:UC[u],borderWidth:2.5,pointRadius:0,tension:.25},
+    {label:"Proyección",data:proj,borderColor:UC[u],borderDash:[5,4],borderWidth:2,pointRadius:3,tension:.25}]},
+  options:{maintainAspectRatio:false,animation:false,plugins:{legend:{position:"bottom",labels:{boxWidth:10,font:{size:9}}},
+    tooltip:{callbacks:{label:c=>c.dataset.label+": "+fmt(c.parsed.y)+" m²"}}},
+    scales:{y:{title:{display:true,text:"m² construidos",font:{size:9}},ticks:{font:{size:9}}},x:{ticks:{font:{size:9},maxRotation:0,autoSkip:true,maxTicksLimit:8}}}}});
+ document.getElementById("evoPop").style.display="block";moveEvo(ev);
+}
+function moveEvo(ev){const pop=document.getElementById("evoPop");const w=pop.offsetWidth||360,hh=pop.offsetHeight||220;
+ let x=ev.clientX+16,y=ev.clientY+16;
+ if(x+w>window.innerWidth-8)x=ev.clientX-w-16;if(x<8)x=8;
+ if(y+hh>window.innerHeight-8)y=window.innerHeight-hh-8;if(y<8)y=8;
+ pop.style.left=x+"px";pop.style.top=y+"px";}
+function hideEvo(){document.getElementById("evoPop").style.display="none";if(evoChart){evoChart.destroy();evoChart=null;}}
 </script>
 </body></html>
