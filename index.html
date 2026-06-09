@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Tendencias 2030 / 2035 — Demografía y uso de suelo (Chile)</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+:root{--navy:#1f4e79;--or:#c55a11;--bg:#f7f9fc;--ink:#1c2733;--mut:#5b6b7b;--line:#e6ebf1;}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.55}
+.warn{background:#c55a11;color:#fff;padding:8px 18px;font-weight:600;font-size:.88rem;text-align:center}
+.warn a{color:#fff;text-decoration:underline}
+header{background:linear-gradient(135deg,#1f4e79,#2e5e8c);color:#fff;padding:26px 22px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+h1{margin:0 0 6px;font-size:1.5rem}h2{color:var(--navy);font-size:1.2rem;margin:26px 0 4px}
+.lead{color:var(--mut);max-width:900px}.lead.w{color:#ffe;opacity:.92}
+.panel{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:16px}
+label{display:block;font-size:.74rem;color:var(--mut);font-weight:600;margin-bottom:4px}
+select{font-size:.95rem;padding:8px 10px;border:1px solid #c7d2de;border-radius:8px;min-width:240px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:14px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px}
+.kpi .v{font-size:1.4rem;font-weight:800;color:var(--navy)}.kpi .l{color:var(--mut);font-size:.78rem;margin-top:3px}
+.kpi .s{color:var(--or);font-weight:700;font-size:.82rem}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}@media(max-width:840px){.grid2{grid-template-columns:1fr}}
+.box{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px}
+.cwrap{position:relative;height:300px}
+#map{height:520px;border-radius:12px;border:1px solid var(--line);margin-top:8px}
+table{border-collapse:collapse;width:100%;font-size:.83rem;margin-top:8px}th,td{padding:6px 9px;border-bottom:1px solid var(--line);text-align:right}th:first-child,td:first-child{text-align:left}thead th{background:var(--navy);color:#fff}
+.legend{background:#fff;padding:8px 10px;border-radius:8px;box-shadow:0 1px 6px rgba(0,0,0,.2);font-size:.78rem}.legend i{display:inline-block;width:12px;height:12px;margin-right:6px;border-radius:2px}
+.note{background:#fff8f0;border:1px solid #f0d9bf;border-radius:10px;padding:14px 16px;color:#7a4a17;font-size:.86rem;margin-top:14px}
+footer{padding:24px;color:var(--mut);font-size:.82rem;text-align:center}
+</style></head>
+<body>
+<div class="warn">⚠ Escenarios PROVISIONALES — la demografía usa un método <b>fallback</b> (pendiente la proyección oficial INE). No usar como pronóstico oficial. · <a href="INFORME_PROYECCIONES.md">Informe metodológico</a></div>
+<header><div class="wrap">
+  <h1>Tendencias de demografía y uso de suelo · 2030 / 2035</h1>
+  <p class="lead w">Proyección por comuna (flujo-medio del stock por uso, rezago-corregido + coherencia residencial). Escenarios Tendencial · Alto · Consolidación. Calibrado por backtesting. Estimaciones en revisión.</p>
+</div></header>
+<div class="wrap">
+  <div class="panel">
+    <div><label>Comuna</label><select id="sel"></select></div>
+    <div><label>Indicador del mapa nacional</label><select id="mapsel">
+      <option value="m2pct">Crecimiento de m² 2024→2035 (%)</option>
+      <option value="pobpct">Crecimiento de población 2024→2035 (%)</option></select></div>
+  </div>
+  <div id="kpis" class="kpis"></div>
+  <div class="grid2">
+    <div class="box"><h3 id="t1">Población</h3><div class="cwrap"><canvas id="cPob"></canvas></div></div>
+    <div class="box"><h3 id="t2">m² construidos por uso</h3><div class="cwrap"><canvas id="cM2"></canvas></div></div>
+  </div>
+  <div class="note" id="cohnote"></div>
+
+  <h2>Mapa nacional del cambio proyectado<span></span></h2>
+  <p class="lead">Coroplético del crecimiento proyectado 2024→2035 (escenario tendencial). Provisional.</p>
+  <div id="map"></div>
+
+  <h2>Backtesting — calibración del modelo</h2>
+  <p class="lead">Entrenar ≤T0, predecir T0+7 años, comparar con el stock observado. MAPE (%) promedio por ciudad. <b>Flujo-medio</b> es el método elegido (más robusto que CAGR).</p>
+  <div class="box" style="overflow:auto"><table id="bt"></table></div>
+</div>
+<footer>Tendencias 2030/2035 (provisionales) · Rodrigo Medina González, Universidad de Concepción · Demografía: método fallback (pendiente proyección INE) · Suelo: Catastro SII reconstruido desde año de construcción.</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const NAVY="#1f4e79",OR="#c55a11",USOS=["Habitacional","Comercio","Educacion","Salud","Oficina","Industria"];
+const UC={Habitacional:"#1f4e79",Comercio:"#c55a11",Educacion:"#21918c",Salud:"#d73027",Oficina:"#8856a7",Industria:"#9aa7b4"};
+const fmt=x=>x==null?"s/d":Math.round(x).toLocaleString('es-CL');
+let SUM,GEO,BT,byCut={},cPob,cM2,map,layer,legend;
+Promise.all([
+ fetch("data/proyecciones_comunas.json").then(r=>r.text()).then(t=>JSON.parse(t.replace(/\bNaN\b/g,"null"))),
+ fetch("data/comunas.geojson").then(r=>r.json()),
+ fetch("data/proyecciones_backtest.json").then(r=>r.json())
+]).then(([s,g,bt])=>{SUM=s;GEO=g;BT=bt;s.comunas.forEach(c=>byCut[c.cut]=c);
+ const sel=document.getElementById("sel");
+ s.comunas.slice().sort((a,b)=>(b.pob_2024||0)-(a.pob_2024||0)).forEach(c=>{const o=document.createElement("option");o.value=c.cut;o.textContent=c.comuna;sel.appendChild(o);});
+ sel.onchange=()=>loadComuna(sel.value); document.getElementById("mapsel").onchange=drawMap;
+ buildBT(); initMap(); drawMap();
+ sel.value="8101"; loadComuna("8101");
+});
+function loadComuna(cut){fetch("data/proyecciones/"+cut+".json").then(r=>r.text()).then(t=>render(JSON.parse(t.replace(/\bNaN\b/g,"null"))));}
+function render(o){
+ const d=o.demografia;
+ const p24=d["2024"].pob,p35=d["2035"].tend.pob,v24=d["2024"].viviendas,v35=d["2035"].tend.viviendas;
+ let m24=0,m35=0; if(o.suelo)USOS.forEach(u=>{if(o.suelo[u]){m24+=o.suelo[u]["2024"];m35+=o.suelo[u]["2035"].tend;}});
+ document.getElementById("kpis").innerHTML=[
+  ["Población 2035",fmt(p35),(p35>=p24?"+":"")+(100*(p35/p24-1)).toFixed(1)+"% vs 2024"],
+  ["Viviendas 2035",fmt(v35),(100*(v35/v24-1)).toFixed(1)+"% vs 2024"],
+  ["m² construidos 2035",fmt(m35),o.suelo?(100*(m35/m24-1)).toFixed(1)+"% vs 2024":"s/d"],
+  ["Demanda viv. nueva 2024→35",fmt(v35-v24),"hogares+desocup."]
+ ].map(([l,v,s])=>'<div class="kpi"><div class="v">'+v+'</div><div class="l">'+l+'</div><div class="s">'+s+'</div></div>').join("");
+ // población
+ const yrs=["2024","2030","2035"];
+ const pob=yrs.map(y=>y==="2024"?d[y].pob:d[y].tend.pob);
+ const pobA=yrs.map(y=>y==="2024"?d[y].pob:d[y].alto.pob);
+ const pobB=yrs.map(y=>y==="2024"?d[y].pob:d[y].bajo.pob);
+ if(cPob)cPob.destroy();
+ cPob=new Chart(cPob_=document.getElementById("cPob"),{type:"line",data:{labels:yrs,datasets:[
+   {label:"Alto",data:pobA,borderColor:"rgba(31,78,121,.35)",pointRadius:0,borderDash:[4,4]},
+   {label:"Tendencial",data:pob,borderColor:NAVY,backgroundColor:NAVY,borderWidth:3,pointRadius:4},
+   {label:"Bajo",data:pobB,borderColor:"rgba(31,78,121,.35)",pointRadius:0,borderDash:[4,4]}]},
+   options:{maintainAspectRatio:false,plugins:{legend:{position:"bottom"}},scales:{y:{title:{display:true,text:"habitantes"}}}}});
+ // m² por uso
+ if(cM2)cM2.destroy();
+ const ds=USOS.filter(u=>o.suelo&&o.suelo[u]).map(u=>({label:u,backgroundColor:UC[u],
+   data:yrs.map(y=>y==="2024"?o.suelo[u]["2024"]:o.suelo[u][y].tend)}));
+ cM2=new Chart(document.getElementById("cM2"),{type:"bar",data:{labels:yrs,datasets:ds},
+   options:{maintainAspectRatio:false,plugins:{legend:{position:"bottom"}},scales:{x:{stacked:true},y:{stacked:true,title:{display:true,text:"m² construidos"}}}}});
+ document.getElementById("t1").textContent="Población — "+o.comuna+" (escenarios)";
+ document.getElementById("t2").textContent="m² construidos por uso — "+o.comuna+" (tendencial)";
+ const dp=100*(p35/p24-1),dh=o.suelo&&o.suelo.Habitacional?100*(o.suelo.Habitacional["2035"].tend/o.suelo.Habitacional["2024"]-1):null;
+ document.getElementById("cohnote").innerHTML="<b>Coherencia demografía–suelo (2024→2035):</b> población "+dp.toFixed(1)+"%"+(dh!=null?", suelo habitacional "+dh.toFixed(1)+"% (atado a Δviviendas)":"")+". El suelo no residencial usa flujo-medio reciente rezago-corregido. <b>Demografía provisional (fallback, sin INE).</b>";
+}
+function buildBT(){let h="<thead><tr><th>Ciudad</th><th>CAGR (T0=2016→2023)</th><th>Flujo-medio</th></tr></thead><tbody>";
+ for(const nm in BT){const r=BT[nm]["2016"];const mc=avg(USOS.map(u=>r[u].cagr)),mf=avg(USOS.map(u=>r[u].flujo));
+  h+="<tr><td>"+nm+"</td><td>"+(mc!=null?mc.toFixed(1)+"%":"—")+"</td><td><b>"+(mf!=null?mf.toFixed(1)+"%":"—")+"</b></td></tr>";}
+ document.getElementById("bt").innerHTML=h+"</tbody>";}
+function avg(a){a=a.filter(x=>x!=null);return a.length?a.reduce((x,y)=>x+y,0)/a.length:null;}
+function initMap(){map=L.map("map",{preferCanvas:true}).setView([-38,-72],5);
+ L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{attribution:'&copy; CARTO',maxZoom:19}).addTo(map);}
+function valFor(c,mode){if(!c)return null;
+ if(mode==="pobpct")return c.pob_2024?100*(c.pob_2035/c.pob_2024-1):null;
+ return c.m2_2024?100*(c.m2_2035/c.m2_2024-1):null;}
+function col(v){if(v==null)return "#d8dde3";if(v<0)return "#d73027";if(v<10)return "#fee08b";if(v<20)return "#a6d96a";if(v<35)return "#66bd63";return "#1a9850";}
+function drawMap(){const mode=document.getElementById("mapsel").value;
+ if(layer)map.removeLayer(layer);
+ layer=L.geoJSON(GEO,{style:f=>{const v=valFor(byCut[f.properties.cut],mode);return {color:"#9aa7b4",weight:.3,fillColor:col(v),fillOpacity:.82};},
+  onEachFeature:(f,l)=>{const c=byCut[f.properties.cut];const v=valFor(c,mode);
+   l.bindPopup("<b>"+(c?c.comuna:f.properties.comuna)+"</b><br>"+(mode==="pobpct"?"Población":"m² construidos")+" 2024→2035: <b>"+(v!=null?(v>=0?"+":"")+v.toFixed(1)+"%":"s/d")+"</b>");}
+ }).addTo(map);
+ if(legend)map.removeControl(legend);legend=L.control({position:"bottomright"});
+ legend.onAdd=()=>{const d=L.DomUtil.create("div","legend");d.innerHTML='<b>Crecimiento 2024→2035</b><br><i style="background:#d73027"></i>&lt;0%<br><i style="background:#fee08b"></i>0–10%<br><i style="background:#a6d96a"></i>10–20%<br><i style="background:#66bd63"></i>20–35%<br><i style="background:#1a9850"></i>&gt;35%';return d;};
+ legend.addTo(map);}
+</script>
+</body></html>
