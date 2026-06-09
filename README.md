@@ -11,7 +11,7 @@ con escenarios (Tendencial · Alto · Consolidación) y calibración por backtes
 ## Método (resumen)
 - **Suelo:** stock de m² por uso reconstruido desde el año de construcción del Catastro SII; proyección por
   **flujo-medio reciente** (rezago-corregido); el habitacional se ata a la demanda de viviendas (coherencia residencial).
-- **Demografía:** **provisional/fallback** (extrapolación censal 2017→2024 amortiguada al nacional) — pendiente
+- **Demografía:** trayectoria nacional **INE (Estimaciones y Proyecciones base 2024)** re-anclada al Censo 2024 y repartida a comunas. Pendiente
   reemplazo por la **proyección oficial INE 2002–2035**.
 - **Calibración:** backtesting (entrenar ≤T0, predecir T0+7). Flujo-medio: MAPE ~7–15% en ciudades grandes.
 

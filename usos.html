@@ -4,6 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Tendencias por uso de suelo · 2030 / 2035 (Chile)</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <style>
 :root{--navy:#1f4e79;--or:#c55a11;--bg:#f7f9fc;--ink:#1c2733;--mut:#5b6b7b;--line:#e6ebf1;}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.5}
@@ -45,14 +46,36 @@ footer{padding:22px;color:var(--mut);font-size:.82rem;text-align:center}
     <div class="box"><h3 id="t2">Variación % por uso (2024→2035)</h3><p>Cuáles usos se incrementan más y cuáles menos.</p><div class="cwrap"><canvas id="cPct"></canvas></div></div>
   </div>
   <div class="box" style="margin-top:16px;overflow:auto"><h3>Detalle</h3><table id="tbl"></table></div>
+  <div class="box" style="margin-top:16px"><h3 id="tmap">Mapa por zona — crecimiento proyectado del m² construido (2024→2035)</h3>
+    <p id="mapnote">Para las áreas metropolitanas: cada zona censal coloreada por su crecimiento proyectado de m² (tendencial).</p>
+    <div id="map" style="height:520px;border-radius:12px;border:1px solid var(--line)"></div></div>
 </div>
 <footer>Tendencias por uso (provisional) · flujo-medio rezago-corregido a nivel de zona urbana · Rodrigo Medina González, U. de Concepción. La residencial no se ata aquí a la demanda de viviendas (usa flujo-medio), por lo que puede crecer más rápido que la proyección comunal demográficamente acotada.</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 const USOS=["Habitacional","Comercio","Educacion","Salud","Oficina","Industria"];
 const UC={Habitacional:"#1f4e79",Comercio:"#c55a11",Educacion:"#21918c",Salud:"#d73027",Oficina:"#8856a7",Industria:"#9aa7b4"};
 const fmt=x=>x==null?"s/d":Math.round(x).toLocaleString('es-CL');
-let IDX,CUR,scen="tend",cQty,cPct;
+let IDX,CUR,scen="tend",cQty,cPct,zmap,zlayer,zlegend;
+const ZMETROS=new Set(["gran_santiago","gran_valparaiso","gran_concepcion","la_serena_coquimbo","iquique_alto_hospicio","gran_rancagua","temuco_padre_las_casas","chillan_chillan_viejo","puerto_montt_puerto_varas"]);
+function zcol(v){if(v==null)return "#d8dde3";if(v<0)return "#d73027";if(v<10)return "#fee08b";if(v<25)return "#a6d96a";if(v<50)return "#66bd63";return "#1a9850";}
+function drawZoneMap(slug){
+ const note=document.getElementById("mapnote"),mapEl=document.getElementById("map");
+ if(!ZMETROS.has(slug)){mapEl.style.display="none";note.textContent="El mapa por zona está disponible para las 9 áreas metropolitanas. Para esta comuna, mira las cantidades y la variación % por uso arriba.";return;}
+ mapEl.style.display="";note.textContent="Cada zona censal coloreada por su crecimiento proyectado de m² construido 2024→2035 (tendencial). Haz clic en una zona para el detalle.";
+ if(!zmap){zmap=L.map("map",{preferCanvas:true}).setView([-36.8,-73.05],11);
+   L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{attribution:'&copy; CARTO',maxZoom:19}).addTo(zmap);}
+ fetch("data/proyecciones_uso/zonas_"+slug+".geojson").then(r=>r.text()).then(t=>{const g=JSON.parse(t.replace(/\bNaN\b/g,"null"));
+   if(zlayer)zmap.removeLayer(zlayer);
+   zlayer=L.geoJSON(g,{style:f=>({weight:.4,color:"#888",fillColor:zcol(f.properties.pct_2035),fillOpacity:.82}),
+     onEachFeature:(f,l)=>{const p=f.properties;l.bindPopup("<b>Zona "+p.zona+"</b> · "+(p.comuna||"")+"<br>m² 2024: "+fmt(p.m2_2024)+"<br>m² 2035: "+fmt(p.m2_2035)+"<br><b>"+(p.pct_2035!=null?(p.pct_2035>=0?"+":"")+p.pct_2035+"%":"s/d")+"</b> (2024→2035)");}}).addTo(zmap);
+   try{zmap.fitBounds(zlayer.getBounds(),{padding:[8,8]});}catch(e){}
+   if(zlegend)zmap.removeControl(zlegend);
+   zlegend=L.control({position:"bottomright"});
+   zlegend.onAdd=()=>{const d=L.DomUtil.create("div","legend");d.innerHTML='<b>Crecimiento m² 2024→2035</b><br><i style="background:#d73027"></i>&lt;0%<br><i style="background:#fee08b"></i>0–10%<br><i style="background:#a6d96a"></i>10–25%<br><i style="background:#66bd63"></i>25–50%<br><i style="background:#1a9850"></i>&gt;50%<br><i style="background:#d8dde3"></i>sin dato';return d;};
+   zlegend.addTo(zmap);setTimeout(()=>zmap.invalidateSize(),60);});
+}
 fetch("data/proyecciones_uso_index.json").then(r=>r.text()).then(t=>{IDX=JSON.parse(t.replace(/\bNaN\b/g,"null"));
  const sel=document.getElementById("city");
  IDX.ciudades.forEach(c=>{const o=document.createElement("option");o.value=c.slug;o.textContent=c.nombre;sel.appendChild(o);});
@@ -62,7 +85,7 @@ fetch("data/proyecciones_uso_index.json").then(r=>r.text()).then(t=>{IDX=JSON.pa
  sel.value=IDX.ciudades.find(c=>c.slug==="gran_concepcion")?"gran_concepcion":IDX.ciudades[0].slug;
  load(sel.value);
 });
-function load(slug){fetch("data/proyecciones_uso/"+slug+".json").then(r=>r.text()).then(t=>{CUR=JSON.parse(t.replace(/\bNaN\b/g,"null"));render();});}
+function load(slug){fetch("data/proyecciones_uso/"+slug+".json").then(r=>r.text()).then(t=>{CUR=JSON.parse(t.replace(/\bNaN\b/g,"null"));render();drawZoneMap(slug);});}
 function render(){const o=CUR;if(!o)return;
  // KPIs: total + top uso que más crece
  const tot=o.total;const pctsorted=USOS.map(u=>[u,o.usos[u].pct_2035]).filter(x=>x[1]!=null).sort((a,b)=>b[1]-a[1]);
