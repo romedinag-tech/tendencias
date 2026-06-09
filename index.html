@@ -108,7 +108,7 @@ function render(o){
  document.getElementById("t1").textContent="Población — "+o.comuna+" (escenarios)";
  document.getElementById("t2").textContent="m² construidos por uso — "+o.comuna+" (tendencial)";
  const dp=100*(p35/p24-1),dh=o.suelo&&o.suelo.Habitacional?100*(o.suelo.Habitacional["2035"].tend/o.suelo.Habitacional["2024"]-1):null;
- document.getElementById("cohnote").innerHTML="<b>Coherencia demografía–suelo (2024→2035):</b> población "+dp.toFixed(1)+"%"+(dh!=null?", suelo habitacional "+dh.toFixed(1)+"% (atado a Δviviendas)":"")+". El suelo no residencial usa flujo-medio reciente rezago-corregido. <b>Demografía: INE comunal base 2017 corregida al techo nacional INE base 2024.</b>";
+ document.getElementById("cohnote").innerHTML="<b>Coherencia demografía–suelo (2024→2035):</b> población "+dp.toFixed(1)+"%"+(dh!=null?", suelo habitacional "+dh.toFixed(1)+"% (atado a Δviviendas)":"")+". El suelo no residencial usa una deriva reciente robusta (ponderada por recencia, sin extrapolar proyectos puntuales atípicos). <b>Demografía: INE comunal base 2017 corregida al techo nacional INE base 2024.</b>";
 }
 function initMap(){map=L.map("map",{preferCanvas:true}).setView([-38,-72],5);
  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{attribution:'&copy; CARTO',maxZoom:19}).addTo(map);}
